@@ -7,26 +7,58 @@ import json
 import time
 import base64
 
+# the interval to change my offer book
+interval = 2
+# how much percentage rate based on whole market
+rate_cut_ratio = 0.85
+# increment rate by 0.01% in my offer
+rate_increment = 0.01
+
+"""Get funding book data from Bitfinex"""
 def get_market_funding_book(currency='fUSD'):
+    #total volume in whole market
+    market_fday_volume_dict = {2: 0, 30: 0, 60: 0, 120: 0}
+    #highest rate in each day set whole market
+    market_frate_upper_dict = {2: -999, 30: -999, 60: -999, 120: -999}
+    # lowest rate in each day set whole market
+    market_frate_lower_dict = {2: 999000, 30: 999000, 60: 999000, 120: 999000}
+
     """Get funding book data from Bitfinex"""
-    book_data = []
     for page in range(5):
         url = f"https://api-pub.bitfinex.com/v2/book/fUST/P{page}?len=250"
         response = requests.get(url)
         response.raise_for_status()
-        book_data.extend(response.json())
+        book_data = response.json()
+        for offer in book_data:
+            numdays = offer[2]
+            if(numdays == 2):
+                market_fday_volume_dict[2] += abs(offer[1]) 
+                market_frate_upper_dict[2] = max(market_frate_upper_dict[2], offer[0])
+                market_frate_lower_dict[2] = min(market_frate_lower_dict[2], offer[0])
+            elif(numdays > 29) and (numdays < 61):
+                market_fday_volume_dict[30] += abs(offer[1])
+                market_frate_upper_dict[30] = max(market_frate_upper_dict[30], offer[0])
+                market_frate_lower_dict[30] = min(market_frate_lower_dict[30], offer[0])
+            elif(numdays > 60) and (numdays < 120):
+                market_fday_volume_dict[60] += abs(offer[1])
+                market_frate_upper_dict[60] = max(market_frate_upper_dict[60], offer[0])
+                market_frate_lower_dict[60] = min(market_frate_lower_dict[60], offer[0])
+            elif(numdays > 120):
+                market_fday_volume_dict[120] += abs(offer[1])
+                market_frate_upper_dict[120] = max(market_frate_upper_dict[120], offer[0])
+                market_frate_lower_dict[120] = min(market_frate_lower_dict[120], offer[0])
 
-    print(book_data)
+    # return total volume, highest rate, lowest rate
+    return market_fday_volume_dict,market_frate_upper_dict,market_frate_lower_dict
 
-def analyze_funding_book(book_data):
-    """Analyze funding book data"""
-    # TODO: implement
-    return 0
 
-def get_history_rate():
-    """Get history rate data from Bitfinex"""
-    # TODO: implement
-    return 0
+"""Guess offer rate from funding book data"""
+def guess_funding_book(volume_dict,rate_upper_dict,rate_lower_dict):
+    total_volume = sum(volume_dict.values())
+    margin_split_ratio_dict = { 2: volume_dict[2]/total_volume, 30: volume_dict[30]/total_volume, 60: volume_dict[60]/total_volume, 120: volume_dict[120]/total_volume}
+    rate_guess = { 2: rate_cut_ratio*rate_upper_dict[2], 30: rate_cut_ratio*rate_upper_dict[30], 60: rate_cut_ratio*rate_upper_dict[60], 120: rate_cut_ratio*rate_upper_dict[120]}
+    return margin_split_ratio_dict,rate_guess
+
 
 # remove current offer in my book
 def remove_lending_offer(currency, offer_id):
@@ -119,16 +151,16 @@ def place_lending_offer(currency, offer_rate):
 def lending_bot_strategy():
     currency = os.getenv('FUND_CURRENCY')
     # get market rate
-    market_rate_usdt = get_market_funding_book(currency)
+    volume_dict,rate_upper_dict,rate_lower_dict = get_market_funding_book(currency)
     
-    # analyze market rate
-    highest_offer_rate = analyze_funding_book(market_rate_usdt)
+    # guess market rate
+    margin_split_ratio_dict,offer_rate_guess = guess_funding_book(volume_dict,rate_upper_dict,rate_lower_dict)
 
     # remove current offer first
     remove_lending_offer(currency)
 
     # place new offer
-    place_lending_offer(currency, highest_offer_rate)
+    place_lending_offer(currency, margin_split_ratio_dict,offer_rate_guess)
     
 
 if __name__ == "__main__":
