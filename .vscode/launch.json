@@ -7,7 +7,7 @@
         {
             "name": "Run Funding Bot",
             "type": "debugpy",
-            "python":"/Users/kang/opt/anaconda3/envs/sele/bin/python",
+            "python":"/Users/kang/opt/anaconda3/envs/bf/bin/python",
             "request": "launch",
             "program": "${workspaceFolder}/start.py",
             "args": ["0"],
