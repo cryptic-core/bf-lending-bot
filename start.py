@@ -15,7 +15,7 @@ BITFINEX_PUBLIC_API_URL = "https://api-pub.bitfinex.com"
 STEPS = 10 # number of steps to offer at each day interval
 rate_increment = 0.001 # increment of rate on each step
 interval = 2 # how frequently(in hours) to replace my offer  
-rate_adjustment_ratio = 0.85 # how much to adjust my offer rate based on market offerbook
+rate_adjustment_ratio = 0.5 # how much to adjust my offer rate based on market offerbook
 
 
 API_KEY, API_SECRET = (
@@ -50,8 +50,8 @@ def get_market_funding_book(currency='fUSD'):
     market_fday_volume_dict = {2: 0, 30: 0, 60: 0, 120: 0}
     #highest rate in each day set whole market
     market_frate_upper_dict = {2: -999, 30: -999, 60: -999, 120: -999}
-    # lowest rate in each day set whole market
-    market_frate_lower_dict = {2: 999000, 30: 999000, 60: 999000, 120: 999000}
+    # weighted average rate in each day set whole market
+    market_frate_ravg_dict = {2: 0, 30: 0, 60: 0, 120: 0}
 
     """Get funding book data from Bitfinex"""
     for page in range(5):
@@ -62,30 +62,35 @@ def get_market_funding_book(currency='fUSD'):
         for offer in book_data:
             numdays = offer[2]
             if(numdays == 2):
-                market_fday_volume_dict[2] += abs(offer[1]) 
+                market_fday_volume_dict[2] += abs(offer[3]) 
                 market_frate_upper_dict[2] = max(market_frate_upper_dict[2], offer[0])
-                market_frate_lower_dict[2] = min(market_frate_lower_dict[2], offer[0])
+                market_frate_ravg_dict[2] += offer[0] * abs(offer[3]) 
             elif(numdays > 29) and (numdays < 61):
-                market_fday_volume_dict[30] += abs(offer[1])
+                market_fday_volume_dict[30] += abs(offer[3])
                 market_frate_upper_dict[30] = max(market_frate_upper_dict[30], offer[0])
-                market_frate_lower_dict[30] = min(market_frate_lower_dict[30], offer[0])
+                market_frate_ravg_dict[30] += offer[0] * abs(offer[3]) 
             elif(numdays > 60) and (numdays < 120):
-                market_fday_volume_dict[60] += abs(offer[1])
+                market_fday_volume_dict[60] += abs(offer[3])
                 market_frate_upper_dict[60] = max(market_frate_upper_dict[60], offer[0])
-                market_frate_lower_dict[60] = min(market_frate_lower_dict[60], offer[0])
+                market_frate_ravg_dict[60] += offer[0] * abs(offer[3])
             elif(numdays > 120):
-                market_fday_volume_dict[120] += abs(offer[1])
+                market_fday_volume_dict[120] += abs(offer[3])
                 market_frate_upper_dict[120] = max(market_frate_upper_dict[120], offer[0])
-                market_frate_lower_dict[120] = min(market_frate_lower_dict[120], offer[0])
-    
+                market_frate_ravg_dict[120] += offer[0] * abs(offer[3])
+
+    market_frate_ravg_dict[2] /= market_fday_volume_dict[2]
+    market_frate_ravg_dict[30] /= market_fday_volume_dict[30]
+    market_frate_ravg_dict[60] /= market_fday_volume_dict[60]
+    market_frate_ravg_dict[120] /= market_fday_volume_dict[120]
+
     print("market_fday_volume_dict:")
     print(market_fday_volume_dict)
     print("market_frate_upper_dict:")
     print(market_frate_upper_dict)
-    print("market_frate_lower_dict:")
-    print(market_frate_lower_dict)
+    print("market_frate_ravg_dict:")
+    print(market_frate_ravg_dict)
     # return total volume, highest rate, lowest rate
-    return market_fday_volume_dict,market_frate_upper_dict,market_frate_lower_dict
+    return market_fday_volume_dict,market_frate_upper_dict,market_frate_ravg_dict
 
 """Calculate how FOMO the market is"""
 def get_market_borrow_sentiment(currency='fUSD'):
