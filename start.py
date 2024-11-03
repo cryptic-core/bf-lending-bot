@@ -155,6 +155,7 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
             break
         segment_rate = (offer_rate_guess_upper[period] - rate_avg_dict[period]) / STEPS
         for i in range(STEPS):
+            available_funds -= splited_fund
             if(available_funds < MINIMUM_FUNDS):
                 break
             rate = round(rate_avg_dict[period] + i * segment_rate,5)
@@ -164,8 +165,6 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
             notification: Notification[FundingOffer] = bfx.rest.auth.submit_funding_offer(
                 type="LIMIT", symbol=currency, amount=str(splited_fund), rate=rate, period=period
             )
-            print(f"notification: {notification}")
-            available_funds -= splited_fund
             time.sleep(0.1)
 
 async def lending_bot_strategy():
