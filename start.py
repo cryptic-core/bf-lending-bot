@@ -105,10 +105,12 @@ def guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment):
     total_volume = sum(volume_dict.values())
     margin_split_ratio_dict = { 2: volume_dict[2]/total_volume, 30: volume_dict[30]/total_volume, 60: volume_dict[60]/total_volume, 120: volume_dict[120]/total_volume}
     # rate guess, we use market highest here only
-    rate_guess_2 = rate_avg_dict[2] + (rate_upper_dict[2] - rate_avg_dict[2]) * (sentiment/highest_sentiment) * rate_adjustment_ratio
-    rate_guess_30 = rate_avg_dict[30] + (rate_upper_dict[30] - rate_avg_dict[30]) * (sentiment/highest_sentiment) * rate_adjustment_ratio
-    rate_guess_60 = rate_avg_dict[60] + (rate_upper_dict[60] - rate_avg_dict[60]) * (sentiment/highest_sentiment) * rate_adjustment_ratio
-    rate_guess_120 = rate_avg_dict[120] + (rate_upper_dict[120] - rate_avg_dict[120]) * (sentiment/highest_sentiment) * rate_adjustment_ratio
+    last_step_percentage = 1+ (rate_adjustment_ratio - 1.0)*STEPS
+    highest_rate = sentiment/highest_sentiment
+    rate_guess_2 = rate_avg_dict[2] * last_step_percentage * highest_rate
+    rate_guess_30 = rate_avg_dict[30] * last_step_percentage * highest_rate
+    rate_guess_60 = rate_avg_dict[60] * last_step_percentage * highest_rate
+    rate_guess_120 = rate_avg_dict[120] * last_step_percentage * highest_rate
     rate_guess_upper = { 2: rate_guess_2, 30: rate_guess_30, 60: rate_guess_60, 120: rate_guess_120}
     print(f"margin_split_ratio_dict: {margin_split_ratio_dict}, rate_guess_upper: {rate_guess_upper}")
     return margin_split_ratio_dict,rate_guess_upper
