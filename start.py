@@ -100,7 +100,7 @@ async def get_market_funding_book(currency='fUSD'):
 
 """Calculate how FOMO the market is"""
 async def get_market_borrow_sentiment(currency='fUSD'):
-    
+    #TODO: fetch matching book from https://report.bitfinex.com/api/json-rpc
     url = f"{BITFINEX_PUBLIC_API_URL}/v2/funding/stats/{currency}/hist"
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
@@ -184,41 +184,45 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
     """
     Args:
         currency (str): The currency to lend (e.g., 'UST', 'USD')
-        amount (float): Amount to lend
-        rate (float): Daily interest rate (in percentage)
+        margin_split_ratio_dict (dict): ratio of each period
+        rate_avg_dict (dict): average rate of each period
+        offer_rate_guess_upper (dict): upper rate of each period
     
     Returns:
-        dict: Response from the API
+        None
     """
     funds = await available_funds(currency)
     if(funds < 150):
         print(f"Not enough funds to lend, funds: {funds}")
         return
+    time.sleep(0.5)
     endpoint = "auth/w/funding/offer/submit"
     for period in margin_split_ratio_dict.keys():
-        splited_fund = max(150,round(margin_split_ratio_dict[period] * funds, 2))
+        splited_fund = max(150,round(margin_split_ratio_dict[period] * funds / STEPS, 2))
         segment_rate = (offer_rate_guess_upper[period] - rate_avg_dict[period]) / STEPS
         for i in range(STEPS):
             rate = round(rate_avg_dict[period] + i * segment_rate,5)
             # FRRDELTAFIX: Place an order at an implicit, static rate, relative to the FRR
             # FRRDELTAVAR: Place an order at an implicit, dynamic rate, relative to the FRR
+            print(f"offerrate @{round(rate * 100 * 365,2)} % APY")
             payload = {
                 "type": "FRRDELTAVAR",
-                "symbol": currency,
-                "amount": splited_fund,
-                "rate": rate,
-                "period": period,
-                "flags": 0
+                "symbol":currency,
+                "amount":str(splited_fund),
+                "rate":str(rate),
+                "period":str(period),
+                "flags":0
             }
             headers = {
                 "Content-Type": "application/json",
-            **await _build_authentication_headers(endpoint, payload)
-        }
-        url = f"{API}/{endpoint}"
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as response:
-                response.raise_for_status()
-                return await response.json()
+                **_build_authentication_headers(endpoint, payload)
+            }
+            url = f"{API}/{endpoint}"
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    response.raise_for_status()
+                    await response.json()
+                    time.sleep(0.1)
 
 async def lending_bot_strategy():
     
