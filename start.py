@@ -4,50 +4,25 @@ load_dotenv()
 import schedule
 from concurrent.futures import ThreadPoolExecutor
 import asyncio
-import requests
+from typing import List
+from bfxapi import Client
+from bfxapi.types import FundingOffer, Notification, Wallet
 import platform
-from datetime import datetime, timedelta
-import hmac
-import hashlib
-import json
 import aiohttp
 
 # API ENDPOINTS
-API = "https://api.bitfinex.com/v2"
 BITFINEX_PUBLIC_API_URL = "https://api-pub.bitfinex.com"
+MINIMUM_FUNDS = 150.0 # minimum funds to lend
 
 """ Strategy Parameters, Modify here"""
 STEPS = 10 # number of steps to offer at each day interval
 highest_sentiment = 5 # highest sentiment to adjust from fair rate to market highest rate
 rate_adjustment_ratio = 1.01 # manually adjustment ratio
-# interval = 1  
+# interval = 1 # interval one hour
 
 
-API_KEY, API_SECRET = (
-    os.getenv("BF_API_KEY"),
-    os.getenv("BF_API_SECRET")
-)
-# Copy from https://docs.bitfinex.com/docs/rest-auth
-def _build_authentication_headers(endpoint, payload = None):
-    nonce = str(round(datetime.now().timestamp() * 1_000))
+bfx = Client(api_key=os.getenv("BF_API_KEY"), api_secret=os.getenv("BF_API_SECRET"))
 
-    message = f"/api/v2/{endpoint}{nonce}"
-
-    if payload != None:
-        message += json.dumps(payload)
-
-    signature = hmac.new(
-        key=API_SECRET.encode("utf8"),
-        msg=message.encode("utf8"),
-        digestmod=hashlib.sha384
-    ).hexdigest()
-
-    return {
-        "bfx-apikey": API_KEY,
-        "bfx-nonce": nonce,
-        "bfx-signature": signature
-    }
-  
 
 """Get funding book data from Bitfinex"""
 async def get_market_funding_book(currency='fUSD'):
@@ -86,8 +61,14 @@ async def get_market_funding_book(currency='fUSD'):
 
     market_frate_ravg_dict[2] /= market_fday_volume_dict[2]
     market_frate_ravg_dict[30] /= market_fday_volume_dict[30]
+    if market_fday_volume_dict[30] < market_frate_ravg_dict[2]:
+        market_frate_ravg_dict[30] = market_frate_ravg_dict[2]
     market_frate_ravg_dict[60] /= market_fday_volume_dict[60]
+    if market_fday_volume_dict[60] < market_frate_ravg_dict[30]:
+        market_frate_ravg_dict[60] = market_frate_ravg_dict[30]
     market_frate_ravg_dict[120] /= market_fday_volume_dict[120]
+    if market_fday_volume_dict[120] < market_frate_ravg_dict[60]:
+        market_frate_ravg_dict[120] = market_frate_ravg_dict[60]
 
     print("market_fday_volume_dict:")
     print(market_fday_volume_dict)
@@ -121,7 +102,6 @@ async def get_market_borrow_sentiment(currency='fUSD'):
 
 """Guess offer rate from funding book data"""
 def guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment):
-    
     total_volume = sum(volume_dict.values())
     margin_split_ratio_dict = { 2: volume_dict[2]/total_volume, 30: volume_dict[30]/total_volume, 60: volume_dict[60]/total_volume, 120: volume_dict[120]/total_volume}
     # rate guess, we use market highest here only
@@ -135,49 +115,20 @@ def guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment):
 
 
 """ get all offers in my book """
-async def list_lending_offers():
-    endpoint = "auth/r/funding/offers/Symbol"
-    payload = {}
-    headers = {
-        "Content-Type": "application/json",
-        **_build_authentication_headers(endpoint, payload)
-    }
-    url = f"{API}/{endpoint}"
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as response:
-            response.raise_for_status()
-            return await response.json()
+async def list_lending_offers(currency):
+    return bfx.rest.auth.get_funding_offers(symbol=currency)
 
 """ remove current offer in my book """
-async def remove_all_lending_offer():
-    endpoint = "auth/w/funding/offer/cancel/all"
-    payload = {}
-    headers = {
-        "Content-Type": "application/json",
-        **_build_authentication_headers(endpoint, payload)
-    }
-    url = f"{API}/{endpoint}"
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as response:
-            response.raise_for_status()
-            return await response.json()
+async def remove_all_lending_offer(currency):
+    return bfx.rest.auth.cancel_all_funding_offers(currency)
 
 """Get available funds"""
-async def available_funds(currency):
-    endpoint = f"auth/r/wallets"
-    payload = {}
-    headers = {
-        "Content-Type": "application/json",
-        **_build_authentication_headers(endpoint, payload)
-    }
-    url = f"{API}/{endpoint}"
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=payload, headers=headers) as response:
-            response.raise_for_status()
-            res = await response.json()
-            return float(res[0][4])
-
-
+async def get_balance(currency):
+    wallets: List[Wallet] = bfx.rest.auth.get_wallets()
+    for wallet in wallets:
+        if f"f{wallet.currency}" == currency:
+            return wallet.available_balance
+    return 0
 
 """ Main Function: Strategically place a lending offer on Bitfinex"""
 async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,offer_rate_guess_upper):
@@ -191,38 +142,31 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
     Returns:
         None
     """
-    funds = await available_funds(currency)
-    if(funds < 150):
+    funds = await get_balance(currency)
+    if(funds < MINIMUM_FUNDS):
         print(f"Not enough funds to lend, funds: {funds}")
         return
     time.sleep(0.5)
-    endpoint = "auth/w/funding/offer/submit"
+    
+    available_funds = funds
     for period in margin_split_ratio_dict.keys():
-        splited_fund = max(150,round(margin_split_ratio_dict[period] * funds / STEPS, 2))
+        splited_fund = max(MINIMUM_FUNDS,round(margin_split_ratio_dict[period] * funds / STEPS, 2))
+        if(available_funds < MINIMUM_FUNDS):
+            break
         segment_rate = (offer_rate_guess_upper[period] - rate_avg_dict[period]) / STEPS
         for i in range(STEPS):
+            if(available_funds < MINIMUM_FUNDS):
+                break
             rate = round(rate_avg_dict[period] + i * segment_rate,5)
             # FRRDELTAFIX: Place an order at an implicit, static rate, relative to the FRR
             # FRRDELTAVAR: Place an order at an implicit, dynamic rate, relative to the FRR
-            print(f"offerrate @{round(rate * 100 * 365,2)} % APY")
-            payload = {
-                "type": "FRRDELTAVAR",
-                "symbol":currency,
-                "amount":str(splited_fund),
-                "rate":str(rate),
-                "period":str(period),
-                "flags":0
-            }
-            headers = {
-                "Content-Type": "application/json",
-                **_build_authentication_headers(endpoint, payload)
-            }
-            url = f"{API}/{endpoint}"
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, headers=headers) as response:
-                    response.raise_for_status()
-                    await response.json()
-                    time.sleep(0.1)
+            print(f"offer rate @{round(rate * 100 * 365,2)} % APY, amount: {splited_fund}, period: {period}")
+            notification: Notification[FundingOffer] = bfx.rest.auth.submit_funding_offer(
+                type="LIMIT", symbol=currency, amount=str(splited_fund), rate=rate, period=period
+            )
+            print(f"notification: {notification}")
+            available_funds -= splited_fund
+            time.sleep(0.1)
 
 async def lending_bot_strategy():
     
@@ -237,11 +181,11 @@ async def lending_bot_strategy():
     margin_split_ratio_dict,offer_rate_guess_upper = guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment)
 
     # get my offers and remove current offer first
-    my_offers = await list_lending_offers()
+    my_offers = await list_lending_offers(currency)
     print(f"my_offers: {my_offers}")
 
     time.sleep(0.5)
-    cancel_res = await remove_all_lending_offer()
+    cancel_res = await remove_all_lending_offer(currency[1:])
     print(f"cancel_res: {cancel_res}")
 
     # place new offer
