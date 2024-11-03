@@ -156,7 +156,7 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
         if(available_funds < MINIMUM_FUNDS):
             break
         segment_rate = (offer_rate_guess_upper[period] - rate_avg_dict[period]) / STEPS
-        for i in range(STEPS):
+        for i in range(1,STEPS+1):
             available_funds -= splited_fund
             if(available_funds < MINIMUM_FUNDS):
                 break
