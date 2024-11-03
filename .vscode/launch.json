@@ -14,5 +14,15 @@
             "console": "integratedTerminal",
             "justMyCode": false
         },
+        {
+            "name": "Start Funding Bot Service",
+            "type": "debugpy",
+            "python":"/Users/kang/opt/anaconda3/envs/bf/bin/python",
+            "request": "launch",
+            "program": "${workspaceFolder}/start.py",
+            "args": ["1"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
     ]
 }
