@@ -17,7 +17,7 @@ MINIMUM_FUNDS = 150.0 # minimum funds to lend
 """ Strategy Parameters, Modify here"""
 STEPS = 10 # number of steps to offer at each day interval
 highest_sentiment = 5 # highest sentiment to adjust from fair rate to market highest rate
-rate_adjustment_ratio = 1.05 # manually adjustment ratio
+rate_adjustment_ratio = 1.01 # manually adjustment ratio
 # interval = 1 # interval one hour
 
 
@@ -61,7 +61,7 @@ async def get_market_funding_book(currency='fUSD'):
 
     market_frate_ravg_dict[2] /= market_fday_volume_dict[2]
     market_frate_ravg_dict[30] /= market_fday_volume_dict[30]
-    if market_fday_volume_dict[30] < market_frate_ravg_dict[2]*1.5:
+    if market_fday_volume_dict[30] < market_frate_ravg_dict[2]:
         market_frate_ravg_dict[30] = market_frate_ravg_dict[2]
     market_frate_ravg_dict[60] /= market_fday_volume_dict[60]
     if market_fday_volume_dict[60] < market_frate_ravg_dict[30]:
@@ -102,17 +102,15 @@ async def get_market_borrow_sentiment(currency='fUSD'):
 
 """Guess offer rate from funding book data"""
 def guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment):
-    
-    # aggrassively lend to short term here
-    margin_split_ratio_dict = { 2: 1.0, 30: 0.0, 60: 0.0, 120: 0.0}
-
+    total_volume = sum(volume_dict.values())
+    margin_split_ratio_dict = { 2: volume_dict[2]/total_volume, 30: volume_dict[30]/total_volume, 60: volume_dict[60]/total_volume, 120: volume_dict[120]/total_volume}
     # rate guess, we use market highest here only
-    last_step_percentage = 1 + (rate_adjustment_ratio - 1.0) * STEPS
-    sentiment_ratio = max(1.0,sentiment/highest_sentiment)
-    rate_guess_2 = rate_avg_dict[2] * last_step_percentage * sentiment_ratio
-    rate_guess_30 = rate_avg_dict[30] * last_step_percentage * sentiment_ratio
-    rate_guess_60 = rate_avg_dict[60] * last_step_percentage * sentiment_ratio
-    rate_guess_120 = rate_avg_dict[120] * last_step_percentage * sentiment_ratio
+    last_step_percentage = 1+ (rate_adjustment_ratio - 1.0)*STEPS
+    highest_rate = sentiment/highest_sentiment
+    rate_guess_2 = rate_avg_dict[2] * last_step_percentage * highest_rate
+    rate_guess_30 = rate_avg_dict[30] * last_step_percentage * highest_rate
+    rate_guess_60 = rate_avg_dict[60] * last_step_percentage * highest_rate
+    rate_guess_120 = rate_avg_dict[120] * last_step_percentage * highest_rate
     rate_guess_upper = { 2: rate_guess_2, 30: rate_guess_30, 60: rate_guess_60, 120: rate_guess_120}
     print(f"margin_split_ratio_dict: {margin_split_ratio_dict}, rate_guess_upper: {rate_guess_upper}")
     return margin_split_ratio_dict,rate_guess_upper
@@ -154,8 +152,6 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
     
     available_funds = funds
     for period in margin_split_ratio_dict.keys():
-        if margin_split_ratio_dict[period]< 0.01:
-            continue
         splited_fund = max(MINIMUM_FUNDS,round(margin_split_ratio_dict[period] * funds / STEPS, 2))
         if(available_funds < MINIMUM_FUNDS):
             break
@@ -209,7 +205,7 @@ if __name__ == '__main__':
         asyncio.run(run_schedule_task())
     else:
         with ThreadPoolExecutor(max_workers=1) as executor:
-            schedule.every().minute.do(lambda: asyncio.run(run_schedule_task()))
+            schedule.every().hour.at(":06").do(lambda: asyncio.run(run_schedule_task()))
             while True:
                 schedule.run_pending()
                 time.sleep(1)
