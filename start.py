@@ -17,7 +17,7 @@ MINIMUM_FUNDS = 150.0 # minimum funds to lend
 """ Strategy Parameters, Modify here"""
 STEPS = 10 # number of steps to offer at each day interval
 highest_sentiment = 5 # highest sentiment to adjust from fair rate to market highest rate
-rate_adjustment_ratio = 1.05 # manually adjustment ratio
+rate_adjustment_ratio = 1.1 # manually adjustment ratio
 # interval = 1 # interval one hour
 
 
