@@ -120,19 +120,31 @@ def guess_funding_book(volume_dict,rate_upper_dict,rate_avg_dict,sentiment):
 
 """ get all offers in my book """
 async def list_lending_offers(currency):
-    return bfx.rest.auth.get_funding_offers(symbol=currency)
+    try:
+        return bfx.rest.auth.get_funding_offers(symbol=currency)
+    except Exception as e:
+        print(f"Error getting lending offers: {e}")
+        return []
 
 """ remove current offer in my book """
 async def remove_all_lending_offer(currency):
-    return bfx.rest.auth.cancel_all_funding_offers(currency)
+    try:
+        return bfx.rest.auth.cancel_all_funding_offers(currency)
+    except Exception as e:
+        print(f"Error removing lending offers: {e}")
+        return None
 
 """Get available funds"""
 async def get_balance(currency):
-    wallets: List[Wallet] = bfx.rest.auth.get_wallets()
-    for wallet in wallets:
-        if f"f{wallet.currency}" == currency:
-            return wallet.available_balance
-    return 0
+    try:
+        wallets: List[Wallet] = bfx.rest.auth.get_wallets()
+        for wallet in wallets:
+            if f"f{wallet.currency}" == currency:
+                return wallet.available_balance
+        return 0
+    except Exception as e:
+        print(f"Error getting balance: {e}")
+        return 0
 
 """ Main Function: Strategically place a lending offer on Bitfinex"""
 async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,offer_rate_guess_upper):
@@ -168,9 +180,13 @@ async def place_lending_offer(currency, margin_split_ratio_dict,rate_avg_dict,of
             # FRRDELTAFIX: Place an order at an implicit, static rate, relative to the FRR
             # FRRDELTAVAR: Place an order at an implicit, dynamic rate, relative to the FRR
             print(f"offer rate @{round(rate * 100 * 365,2)} % APY, amount: {splited_fund}, period: {period}")
-            notification: Notification[FundingOffer] = bfx.rest.auth.submit_funding_offer(
-                type="LIMIT", symbol=currency, amount=str(splited_fund), rate=rate, period=period
-            )
+            try:
+                notification: Notification[FundingOffer] = bfx.rest.auth.submit_funding_offer(
+                    type="LIMIT", symbol=currency, amount=str(splited_fund), rate=rate, period=period
+                )
+            except Exception as e:
+                print(f"Error submitting funding offer: {e}")
+                continue
             time.sleep(0.1)
 
 async def lending_bot_strategy():
