@@ -22,19 +22,20 @@ The bot continuously monitors the Bitfinex funding market and:
 ## Example Usage
 
 ![Bot in Action](screenshot/bf_lending_log.png)
-*(Add your screenshot here by placing it in a screenshots folder)*
+
 
 ## Setup
 
-*(Add setup instructions here)*
+deploy on railway or any other app platform supports docker
 
 ## Configuration
 
-*(Add configuration details here)*
+Add BF_API_KEY and BF_API_SECRET in the environment setup section
 
 ## Requirements
 
-*(Add requirements here)*
+python 3.10
+run the pip install -r requirements.txt 
 
 ## Disclaimer
 
@@ -42,4 +43,4 @@ This bot is for educational purposes only. Use at your own risk. Cryptocurrency 
 
 ## License
 
-*(Add license information here)*
+Free to use and modify
