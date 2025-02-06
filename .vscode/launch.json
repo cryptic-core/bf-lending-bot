@@ -1,0 +1,28 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Funding Bot",
+            "type": "debugpy",
+            "python":"/Users/kang/opt/anaconda3/envs/bf/bin/python",
+            "request": "launch",
+            "program": "${workspaceFolder}/start.py",
+            "args": ["0"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Start Funding Bot Service",
+            "type": "debugpy",
+            "python":"/Users/kang/opt/anaconda3/envs/bf/bin/python",
+            "request": "launch",
+            "program": "${workspaceFolder}/start.py",
+            "args": ["1"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+    ]
+}
